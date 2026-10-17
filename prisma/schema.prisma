@@ -71,3 +71,14 @@ model ReglaScoring {
   actualizadoEn DateTime @updatedAt
 }
 
+
+// (Mantén tus modelos anteriores arriba, como el modelo Lead)
+
+model Usuario {
+  id        String   @id @default(uuid())
+  nombre    String
+  email     String   @unique
+  password  String
+  rol       String   @default("ASESOR") // Puede ser "ADMIN" o "ASESOR"
+  creadoEn  DateTime @default(now())
+}

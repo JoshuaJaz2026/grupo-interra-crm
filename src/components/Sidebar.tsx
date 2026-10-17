@@ -1,54 +1,84 @@
 "use client";
 
 import Link from "next/link";
-import { LayoutDashboard, Users, Star, BarChart3, ShieldCheck } from "lucide-react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { LayoutDashboard, Users, Star, BarChart3, ShieldCheck, LogOut } from "lucide-react";
+import { cerrarSesion } from "@/app/login/actions"; 
 
-export function Sidebar() {
+export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter(); 
 
-  const menuItems = [
-    { nombre: "1. Resumen Comercial", ruta: "/dashboard", icono: LayoutDashboard },
-    { nombre: "2. Seguimiento de Leads", ruta: "/seguimiento", icono: Users },
-    { nombre: "3. Lead Scoring", ruta: "/lead-scoring", icono: Star, diferenciador: true },
-    { nombre: "4. Desempeño Comercial", ruta: "/desempeno", icono: BarChart3 },
-    { nombre: "5. Gestión de Asesores", ruta: "/asesores", icono: ShieldCheck }, // 🔥 NUEVO MÓDULO
+  // 👇 El menú reordenado
+  const menu = [
+    { name: "1. Resumen Comercial", path: "/dashboard", icon: LayoutDashboard },
+    { name: "2. Desempeño Comercial", path: "/desempeno", icon: BarChart3 },
+    { name: "3. Seguimiento de Leads", path: "/seguimiento", icon: Users },
+    { name: "4. Lead Scoring", path: "/lead-scoring", icon: Star, badge: "DIFERENCIADOR" },
+    { name: "5. Gestión de Asesores", path: "/asesores", icon: ShieldCheck },
   ];
 
+  const handleLogout = async () => {
+    await cerrarSesion(); 
+    router.push("/login"); 
+  };
+
   return (
-    <aside className="w-64 bg-[#0B1120] text-white h-screen fixed flex flex-col border-r border-slate-800 z-50">
-      <div className="p-6 border-b border-slate-800 flex items-center gap-3">
-        <div className="bg-blue-600 text-white font-bold text-xl p-2 rounded-lg flex items-center justify-center w-10 h-10">GI</div>
+    <aside className="w-64 h-full bg-[#0f172a] text-slate-300 hidden md:flex flex-col shrink-0">
+      {/* 🚀 LOGO INTERRA */}
+      <div className="p-6 flex items-center gap-3">
+        <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center font-black text-white text-lg shadow-lg">
+          GI
+        </div>
         <div>
-          <h2 className="font-bold tracking-tight text-white leading-tight">GRUPO INTERRA</h2>
-          <p className="text-[10px] text-blue-400 font-semibold uppercase">Cusco Inmobiliario</p>
+          <h1 className="font-black text-white tracking-tight leading-none text-sm">GRUPO INTERRA</h1>
+          <span className="text-[9px] text-blue-400 font-black tracking-widest">CUSCO INMOBILIARIO</span>
         </div>
       </div>
-      <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
-        <p className="text-xs text-slate-500 font-semibold mb-4 px-3 uppercase tracking-wider">Inteligencia Comercial</p>
-        {menuItems.map((item) => {
-          const isActive = pathname === item.ruta;
-          return (
-            <Link
-              key={item.ruta}
-              href={item.ruta}
-              className={`flex items-center justify-between px-3 py-3 rounded-lg font-medium transition-all duration-200 ${
-                isActive ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-slate-800 hover:text-white"
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <item.icono className="w-5 h-5" />
-                <span className="text-sm">{item.nombre}</span>
-              </div>
-              {item.diferenciador && (
-                <span className="bg-amber-500/20 text-amber-400 text-[10px] px-2 py-0.5 rounded uppercase font-bold">
-                  Diferenciador
-                </span>
-              )}
-            </Link>
-          );
-        })}
-      </nav>
+
+      {/* 📋 NAVEGACIÓN */}
+      <div className="px-4 py-4 flex-1">
+        <p className="text-[11px] font-black text-slate-500 mb-4 tracking-widest uppercase px-2">
+          Inteligencia Comercial
+        </p>
+        <nav className="flex flex-col gap-1.5">
+          {menu.map((item) => {
+            const isActive = pathname.startsWith(item.path);
+            return (
+              <Link href={item.path} key={item.path}>
+                <div
+                  className={`flex items-center justify-between px-3 py-3 rounded-xl cursor-pointer transition-all font-bold text-[13px] ${
+                    isActive
+                      ? "bg-blue-600 text-white shadow-md"
+                      : "hover:bg-slate-800 hover:text-white text-slate-400"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <item.icon className="w-5 h-5" />
+                    {item.name}
+                  </div>
+                  {item.badge && (
+                    <span className="text-[8px] bg-amber-500/20 text-amber-500 px-1.5 py-0.5 rounded-md tracking-widest uppercase font-black border border-amber-500/20">
+                      {item.badge}
+                    </span>
+                  )}
+                </div>
+              </Link>
+            );
+          })}
+        </nav>
+      </div>
+
+      {/* 🚪 BOTÓN CERRAR SESIÓN */}
+      <div className="p-4 mt-auto border-t border-slate-800/50">
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl cursor-pointer transition-all font-bold text-[13px] hover:bg-rose-500/10 hover:text-rose-400 text-slate-400"
+        >
+          <LogOut className="w-5 h-5" />
+          Cerrar Sesión
+        </button>
+      </div>
     </aside>
   );
 }

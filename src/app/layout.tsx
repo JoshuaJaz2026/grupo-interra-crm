@@ -1,30 +1,31 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { Sidebar } from "@/components/Sidebar";
+import ClientLayout from "./ClientLayout";
 
-const inter = Inter({ subsets: ["latin"] });
+// 🔥 Importamos la fuente profesional Inter
+const inter = Inter({ 
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700", "900"] 
+});
 
 export const metadata: Metadata = {
-  title: "Dashboard Interra UTEC",
-  description: "Inteligencia Comercial y Gestión de Leads",
+  title: "Grupo Interra CRM",
+  description: "Plataforma de Inteligencia Comercial y Gestión de Leads",
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
     <html lang="es">
-      <body className={`${inter.className} bg-slate-50 min-h-screen flex text-slate-900`}>
-        {/* Barra Lateral Fija */}
-        <Sidebar />
-        
-        {/* Contenido Principal a la Derecha */}
-        <main className="flex-1 ml-64 overflow-x-hidden">
+      {/* Aplicamos la fuente a todo el sistema */}
+      <body className={`${inter.className} antialiased bg-white`}>
+        <ClientLayout>
           {children}
-        </main>
+        </ClientLayout>
       </body>
     </html>
   );
