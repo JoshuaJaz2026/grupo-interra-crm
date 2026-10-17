@@ -1,0 +1,73 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Lead {
+  id                    String    @id @default(cuid())
+  idLeadExcel           String?   @unique // Ej. L0001
+  fechaCaptacion        DateTime?
+  campana               String
+  proyecto              String
+  fuente                String?
+  cliente               String
+  asesor                String    @default("Sin Asignar")
+  estado                String    @default("Nuevo")
+  
+  // Tiempos de atención
+  fechaPrimerContacto   DateTime?
+  fechaUltimoContacto   DateTime?
+  
+  // Acciones y Scoring
+  solicitudInfo         Boolean   @default(false)
+  solicitudVisita       Boolean   @default(false)
+  numInteracciones      Int       @default(0)
+  seguimientoRealizado  Boolean   @default(false)
+  proximoSeguimiento    DateTime?
+  
+  // Cierre
+  resultado             String?   @default("En proceso")
+  fechaCierre           DateTime?
+  
+  // Resultados del Motor Interno
+  puntaje               Int       @default(0)
+  prioridad             String    @default("BAJA")
+  
+  creadoEn              DateTime  @default(now())
+  actualizadoEn         DateTime  @updatedAt
+}
+
+model Asesor {
+  id             String   @id @default(cuid())
+  nombres        String
+  apellidos      String
+  correo         String   @unique
+  telefono       String?
+  contrasena     String
+  
+  // Métricas del vendedor
+  leadsAsignados Int      @default(0)
+  leadsGanados   Int      @default(0)
+  tasaConversion Float    @default(0.0)
+  estado         String   @default("Activo")
+
+  creadoEn       DateTime @default(now())
+  actualizadoEn  DateTime @updatedAt
+}
+
+// 🔥 NUEVA TABLA: MOTOR DE LEAD SCORING
+model ReglaScoring {
+  id            Int      @id @default(autoincrement())
+  categoria     String   // Ej: "Estado del lead"
+  condicion     String   // Ej: "Lead interesado"
+  puntaje       Int      // Ej: 30 o -20
+  justificacion String   // Ej: "Refleja un nivel inicial de interés comercial."
+  tipo          String   @default("positivo") // "positivo" o "negativo"
+  
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+}
+
