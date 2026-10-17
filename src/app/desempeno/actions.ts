@@ -14,8 +14,6 @@ export async function obtenerMetricasDesempeno(filtroTiempo: string = "Últimos 
         break;
       case "Mes anterior":
         fechaInicio = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
-        // Para "Mes anterior", 'hoy' debería ser el último día del mes anterior, 
-        // pero lo mantendremos simple calculando todo desde la fecha de inicio.
         break;
       case "Este año":
         fechaInicio = new Date(hoy.getFullYear(), 0, 1);
@@ -29,18 +27,17 @@ export async function obtenerMetricasDesempeno(filtroTiempo: string = "Últimos 
     // 2. Consulta a la base de datos: Total de Leads en el rango
     const totalLeads = await prisma.lead.count({
       where: {
-        fechaCreacion: {
+        fechaCaptacion: { // <- Corregido aquí
           gte: fechaInicio,
         },
       },
     });
 
     // 3. Consulta: Leads "Cerrados" (Ganados/Vendidos)
-    // Ajusta "Vendido" por el estado exacto que uses en tu base de datos (ej. "Cerrado", "Comprado")
     const leadsCerrados = await prisma.lead.count({
       where: {
         estado: "Vendido", 
-        fechaCreacion: {
+        fechaCaptacion: { // <- Corregido aquí
           gte: fechaInicio,
         },
       },
@@ -50,7 +47,7 @@ export async function obtenerMetricasDesempeno(filtroTiempo: string = "Últimos 
     const leadsPerdidos = await prisma.lead.count({
       where: {
         estado: "Perdido",
-        fechaCreacion: {
+        fechaCaptacion: { // <- Corregido aquí
           gte: fechaInicio,
         },
       },
@@ -65,7 +62,7 @@ export async function obtenerMetricasDesempeno(filtroTiempo: string = "Últimos 
       datos: {
         tasaConversion: `${tasaConversion}%`,
         leadsGestionados: totalLeads.toString(),
-        tiempoRespuesta: "14m", // Esto requiere una lógica más compleja con timestamps de interacciones, lo dejamos estático por ahora o puedes calcularlo si tienes el dato.
+        tiempoRespuesta: "14m", 
         oportunidadesPerdidas: leadsPerdidos.toString(),
       }
     };
