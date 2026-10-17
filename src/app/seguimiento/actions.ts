@@ -60,11 +60,11 @@ export async function crearLeadSeguimiento(datos: any) {
   }
 }
 
-// 🔥 NUEVA FUNCIÓN PARA ACTUALIZAR
 export async function actualizarLeadSeguimiento(id: string, datos: any) {
   try {
     const parseDate = (val: string) => val && val !== "-" ? new Date(val) : null;
-    const parseBool = (val: string) => val === "Sí" || val === true;
+    // 🔥 CORRECCIÓN AQUÍ: Se acepta que "val" pueda ser string o boolean para que TypeScript sea feliz
+    const parseBool = (val: string | boolean) => val === "Sí" || val === true;
 
     await prisma.lead.update({
       where: { id },
@@ -79,10 +79,10 @@ export async function actualizarLeadSeguimiento(id: string, datos: any) {
         estado: datos.estado,
         fechaPrimerContacto: parseDate(datos.fechaPrimerContacto),
         fechaUltimoContacto: parseDate(datos.fechaUltimoContacto),
-        solicitudInfo: parseBool(datos.solicitudInfo as any),
-        solicitudVisita: parseBool(datos.solicitudVisita as any),
+        solicitudInfo: parseBool(datos.solicitudInfo),
+        solicitudVisita: parseBool(datos.solicitudVisita),
         numInteracciones: Number(datos.numInteracciones) || 0,
-        seguimientoRealizado: parseBool(datos.seguimientoRealizado as any),
+        seguimientoRealizado: parseBool(datos.seguimientoRealizado),
         proximoSeguimiento: parseDate(datos.proximoSeguimiento),
         resultado: datos.resultado,
         fechaCierre: parseDate(datos.fechaCierre),
@@ -97,10 +97,6 @@ export async function actualizarLeadSeguimiento(id: string, datos: any) {
   }
 }
 
-
-// (Mantén las funciones de obtener, crear y actualizar arriba...)
-
-// 🔥 NUEVA FUNCIÓN PARA ELIMINAR
 export async function eliminarLeadSeguimiento(id: string) {
   try {
     await prisma.lead.delete({
@@ -115,7 +111,6 @@ export async function eliminarLeadSeguimiento(id: string) {
   }
 }
 
-// 🔥 INYECTOR MASIVO DE EXCEL
 export async function cargarLeadsMasivos(leadsExcel: any[]) {
   try {
     const parseDate = (val: any) => {
@@ -130,7 +125,6 @@ export async function cargarLeadsMasivos(leadsExcel: any[]) {
     };
 
     const leadsFormateados = leadsExcel.map(row => {
-      // Calculamos un puntaje inicial basado en sus interacciones del excel
       const interacciones = Number(row["N° interacciones"]) || 0;
       const score = (interacciones * 5) + (parseBool(row["Solicitud visita"]) ? 30 : 0) + (parseBool(row["Solicitud información"]) ? 10 : 0);
 
@@ -170,7 +164,6 @@ export async function cargarLeadsMasivos(leadsExcel: any[]) {
   }
 }
 
-// 🔥 FUNCIÓN PARA VACIAR TODA LA BASE DE DATOS
 export async function eliminarTodosLosLeads() {
   try {
     await prisma.lead.deleteMany({});
