@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search, Filter, Download, Plus, Calendar, User, FileText, CheckCircle2, ChevronLeft, ChevronRight, Edit, Loader2, Trash2, X, Save, AlertTriangle, UploadCloud } from "lucide-react";
+import { Search, Filter, Download, Plus, Calendar, User, FileText, CheckCircle2, ChevronLeft, ChevronRight, Edit, Loader2, Trash2, X, Save, AlertTriangle, UploadCloud, Star } from "lucide-react";
 import * as XLSX from "xlsx";
-import { obtenerLeadsSeguimiento, crearLeadSeguimiento, actualizarLeadSeguimiento, eliminarLeadSeguimiento, cargarLeadsMasivos, eliminarTodosLosLeads } from "./actions";
+import { obtenerLeadsSeguimiento, crearLeadSeguimiento, actualizarLeadSeguimiento, eliminarLeadSeguimiento, cargarLeadsMasivos, eliminarTodosLosLeads, recalcularScoresMasivo } from "./actions";
 
 const formatearFecha = (fecha: Date | string | null) => {
   if (!fecha) return "";
@@ -86,6 +86,19 @@ export default function SeguimientoPage() {
 
   useEffect(() => { cargarDatos(); }, []);
 
+  // 🔥 NUEVA FUNCIÓN PARA CALCULAR LOS SCORES
+  const handleRecalcularScores = async () => {
+    setCargando(true);
+    const res = await recalcularScoresMasivo();
+    if (res.exito) {
+      setAlerta({ visible: true, mensaje: res.mensaje || "Puntajes actualizados correctamente.", tipo: 'exito' });
+      await cargarDatos(); 
+    } else {
+      setAlerta({ visible: true, mensaje: res.error || "Ocurrió un error al calcular los puntajes.", tipo: 'error' });
+      setCargando(false);
+    }
+  };
+
   const getEstadoColor = (estado: string) => {
     switch (estado?.toLowerCase()) {
       case "ganado": return "bg-emerald-100 text-emerald-700 border-emerald-200";
@@ -130,7 +143,6 @@ export default function SeguimientoPage() {
     reader.readAsBinaryString(file);
   };
 
-  // 🔥 LÓGICA DE BORRADO DE 1 FILA
   const abrirConfirmacionBorrado = (id: string) => setModalBorrar({ visible: true, id, cargando: false });
   
   const procesarBorradoSeguro = async () => {
@@ -146,7 +158,6 @@ export default function SeguimientoPage() {
     }
   };
 
-  // 🔥 LÓGICA DE BORRADO MASIVO (VACIAR TABLA)
   const procesarBorradoMasivoSeguro = async () => {
     setModalBorrarTodo(prev => ({ ...prev, cargando: true }));
     const res = await eliminarTodosLosLeads();
@@ -232,11 +243,8 @@ export default function SeguimientoPage() {
         .hide-scroll:hover::-webkit-scrollbar-thumb { background: #94a3b8; }
       `}} />
 
-      {/* 🚀 MODALES GLOBALES */}
       <ModalAlerta visible={alerta.visible} mensaje={alerta.mensaje} tipo={alerta.tipo} onClose={() => setAlerta({ ...alerta, visible: false })} />
       <ModalConfirmacion visible={modalBorrar.visible} cargando={modalBorrar.cargando} onConfirm={procesarBorradoSeguro} onCancel={() => setModalBorrar({ visible: false, id: "", cargando: false })} mensaje="Esta acción borrará al cliente y todo su historial de interacción de forma permanente." />
-      
-      {/* 🔥 MODAL DE SEGURIDAD PARA VACIAR LA TABLA */}
       <ModalConfirmacion 
         visible={modalBorrarTodo.visible} 
         cargando={modalBorrarTodo.cargando} 
@@ -245,11 +253,9 @@ export default function SeguimientoPage() {
         mensaje="¡ALERTA CRÍTICA! Esta acción eliminará ABSOLUTAMENTE TODOS los leads de la base de datos. Esta operación es irreversible." 
       />
 
-      {/* 🔥 MODAL FORMULARIO GIGANTE */}
       {modalForm.visible && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-md animate-in fade-in duration-300 p-4">
           <div className="bg-white rounded-[32px] w-full max-w-4xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.3)] flex flex-col max-h-[90vh] overflow-hidden animate-in zoom-in-95 duration-300 border border-slate-100">
-            
             <div className="flex items-center justify-between p-6 md:p-8 border-b border-slate-100 bg-white z-10 shrink-0">
               <div>
                 <h2 className="text-2xl font-black text-slate-900 tracking-tight">{modalForm.modo === 'crear' ? 'Registrar Nuevo Lead' : 'Editar Información del Lead'}</h2>
@@ -262,8 +268,6 @@ export default function SeguimientoPage() {
 
             <div className="p-6 md:p-8 overflow-y-auto hide-scroll flex-1 bg-slate-50/50">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
-                
-                {/* BLOQUE 1: INFO BÁSICA */}
                 <div className="col-span-1 md:col-span-2 bg-white p-6 md:p-8 rounded-3xl border border-slate-200 shadow-sm grid grid-cols-1 md:grid-cols-2 gap-6">
                   <h3 className="col-span-1 md:col-span-2 text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2 mb-2"><User className="w-5 h-5 text-blue-500"/> Información Principal</h3>
                   <div><label className={labelClass}>Nombre del Cliente *</label><input type="text" placeholder="Ej. Juan Pérez" className={inputFormClass} value={modalForm.datos.cliente} onChange={e => setModalForm(prev => ({...prev, datos: {...prev.datos, cliente: e.target.value}}))} /></div>
@@ -274,7 +278,6 @@ export default function SeguimientoPage() {
                   <div><label className={labelClass}>Fuente / Red Social</label><input type="text" placeholder="Facebook, Google..." className={inputFormClass} value={modalForm.datos.fuente} onChange={e => setModalForm(prev => ({...prev, datos: {...prev.datos, fuente: e.target.value}}))} /></div>
                 </div>
 
-                {/* BLOQUE 2: ESTADO Y FECHAS */}
                 <div className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col gap-6">
                   <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2 mb-2"><Calendar className="w-5 h-5 text-amber-500"/> Estado y Tiempos</h3>
                   <div>
@@ -291,7 +294,6 @@ export default function SeguimientoPage() {
                   </div>
                 </div>
 
-                {/* BLOQUE 3: INTERACCIÓN */}
                 <div className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col gap-6">
                   <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2 mb-2"><CheckCircle2 className="w-5 h-5 text-emerald-500"/> Acciones Comerciales</h3>
                   <div className="grid grid-cols-2 gap-4">
@@ -302,7 +304,6 @@ export default function SeguimientoPage() {
                   </div>
                   <div><label className={labelClass}>Próximo Seguimiento</label><input type="date" className={inputFormClass} value={modalForm.datos.proximoSeguimiento} onChange={e => setModalForm(prev => ({...prev, datos: {...prev.datos, proximoSeguimiento: e.target.value}}))} /></div>
                 </div>
-                
               </div>
             </div>
 
@@ -312,7 +313,6 @@ export default function SeguimientoPage() {
                 {modalForm.cargando ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />} Guardar Lead
               </button>
             </div>
-            
           </div>
         </div>
       )}
@@ -325,13 +325,18 @@ export default function SeguimientoPage() {
           </h1>
           <p className="text-sm text-slate-500 font-medium mt-1.5">Matriz maestra de gestión comercial e interacciones.</p>
         </div>
-        <div className="flex items-center gap-3 w-full md:w-auto">
+        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
           <div className="relative w-full md:w-64 group hidden md:block">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
             <input type="text" placeholder="Buscar cliente o ID..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-full text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all shadow-sm" />
           </div>
           
-          {/* 🔥 NUEVO BOTÓN PARA VACIAR LA TABLA */}
+          {/* 🔥 BOTÓN MÁGICO DE SCORING */}
+          <button onClick={handleRecalcularScores} className="cursor-pointer bg-amber-50 hover:bg-amber-100 text-amber-600 px-5 py-2.5 rounded-full font-bold shadow-sm transition-all text-sm flex items-center gap-2 border border-amber-200">
+            <Star className="w-4 h-4" />
+            <span className="hidden md:inline">Calcular Scores</span>
+          </button>
+
           <button onClick={() => setModalBorrarTodo({ visible: true, cargando: false })} className="cursor-pointer bg-rose-50 hover:bg-rose-100 text-rose-600 px-5 py-2.5 rounded-full font-bold shadow-sm transition-all text-sm flex items-center gap-2 border border-rose-200">
             <Trash2 className="w-4 h-4" />
             <span className="hidden md:inline">Vaciar Tabla</span>
@@ -355,57 +360,62 @@ export default function SeguimientoPage() {
         </div>
         
         <div className="flex-1 overflow-auto bg-white block hide-scroll">
-          <table className="w-full text-left table-fixed min-w-[2400px]">
+          <table className="w-full text-left table-auto">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 sticky top-0 z-20 whitespace-nowrap">
               <tr>
-                <th className="py-5 px-4 font-black text-xs uppercase tracking-widest text-center w-[120px]">ID Lead</th>
-                <th className="py-5 px-4 font-black text-xs uppercase tracking-widest w-[160px]">Captación</th>
-                <th className="py-5 px-4 font-black text-xs uppercase tracking-widest w-[220px]">Campaña</th>
-                <th className="py-5 px-4 font-black text-xs uppercase tracking-widest w-[180px]">Proyecto</th>
-                <th className="py-5 px-4 font-black text-xs uppercase tracking-widest w-[140px]">Fuente</th>
-                <th className="py-5 px-4 font-black text-xs uppercase tracking-widest w-[200px]">Cliente</th>
-                <th className="py-5 px-4 font-black text-xs uppercase tracking-widest w-[180px]">Asesor</th>
-                <th className="py-5 px-4 font-black text-xs uppercase tracking-widest text-center w-[160px]">Estado</th>
-                <th className="py-5 px-4 font-black text-xs uppercase tracking-widest text-center w-[140px]">1er Contacto</th>
-                <th className="py-5 px-4 font-black text-xs uppercase tracking-widest text-center w-[140px]">Últ. Contacto</th>
-                <th className="py-5 px-2 font-black text-xs uppercase tracking-widest text-center w-[100px]">Sol. Info</th>
-                <th className="py-5 px-2 font-black text-xs uppercase tracking-widest text-center w-[100px]">Sol. Visita</th>
-                <th className="py-5 px-2 font-black text-xs uppercase tracking-widest text-center w-[100px]">Interac.</th>
-                <th className="py-5 px-2 font-black text-xs uppercase tracking-widest text-center w-[100px]">Seguim.</th>
-                <th className="py-5 px-4 font-black text-xs uppercase tracking-widest text-center w-[140px]">Próx. Seg.</th>
-                <th className="py-5 px-4 font-black text-xs uppercase tracking-widest text-center w-[140px]">Resultado</th>
-                <th className="py-5 px-4 font-black text-xs uppercase tracking-widest text-center w-[120px]">Cierre</th>
-                <th className="py-5 px-4 font-black text-xs uppercase tracking-widest text-center w-[120px] sticky right-0 bg-slate-50 border-l border-slate-200 shadow-[-5px_0_10px_rgba(0,0,0,0.02)]">Acción</th>
+                <th className="py-5 px-4 font-black text-xs uppercase tracking-widest text-center min-w-[120px] whitespace-nowrap">ID Lead</th>
+                <th className="py-5 px-4 font-black text-xs uppercase tracking-widest text-center min-w-[120px] whitespace-nowrap">Score</th>
+                <th className="py-5 px-4 font-black text-xs uppercase tracking-widest min-w-[160px] whitespace-nowrap">Captación</th>
+                <th className="py-5 px-4 font-black text-xs uppercase tracking-widest min-w-[260px] whitespace-nowrap">Campaña</th>
+                <th className="py-5 px-4 font-black text-xs uppercase tracking-widest min-w-[220px] whitespace-nowrap">Proyecto</th>
+                <th className="py-5 px-4 font-black text-xs uppercase tracking-widest min-w-[160px] whitespace-nowrap">Fuente</th>
+                <th className="py-5 px-4 font-black text-xs uppercase tracking-widest min-w-[220px] whitespace-nowrap">Cliente</th>
+                <th className="py-5 px-4 font-black text-xs uppercase tracking-widest min-w-[200px] whitespace-nowrap">Asesor</th>
+                <th className="py-5 px-4 font-black text-xs uppercase tracking-widest text-center min-w-[160px] whitespace-nowrap">Estado</th>
+                <th className="py-5 px-4 font-black text-xs uppercase tracking-widest text-center min-w-[140px] whitespace-nowrap">1er Contacto</th>
+                <th className="py-5 px-4 font-black text-xs uppercase tracking-widest text-center min-w-[140px] whitespace-nowrap">Últ. Contacto</th>
+                <th className="py-5 px-2 font-black text-xs uppercase tracking-widest text-center min-w-[100px] whitespace-nowrap">Sol. Info</th>
+                <th className="py-5 px-2 font-black text-xs uppercase tracking-widest text-center min-w-[100px] whitespace-nowrap">Sol. Visita</th>
+                <th className="py-5 px-2 font-black text-xs uppercase tracking-widest text-center min-w-[100px] whitespace-nowrap">Interac.</th>
+                <th className="py-5 px-2 font-black text-xs uppercase tracking-widest text-center min-w-[100px] whitespace-nowrap">Seguim.</th>
+                <th className="py-5 px-4 font-black text-xs uppercase tracking-widest text-center min-w-[140px] whitespace-nowrap">Próx. Seg.</th>
+                <th className="py-5 px-4 font-black text-xs uppercase tracking-widest text-center min-w-[180px] whitespace-nowrap">Resultado</th>
+                <th className="py-5 px-4 font-black text-xs uppercase tracking-widest text-center min-w-[140px] whitespace-nowrap">Cierre</th>
+                <th className="py-5 px-4 font-black text-xs uppercase tracking-widest text-center min-w-[120px] whitespace-nowrap sticky right-0 bg-slate-50 border-l border-slate-200 shadow-[-5px_0_10px_rgba(0,0,0,0.02)]">Acción</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-600 bg-white">
               {cargando ? (
-                <tr><td colSpan={18} className="py-16 text-center"><Loader2 className="w-8 h-8 animate-spin mx-auto text-blue-500" /></td></tr>
+                <tr><td colSpan={19} className="py-16 text-center"><Loader2 className="w-8 h-8 animate-spin mx-auto text-blue-500" /></td></tr>
               ) : leadsPaginados.length === 0 ? (
-                <tr><td colSpan={18} className="py-16 text-center text-slate-400 font-bold text-lg">No hay leads registrados aún.</td></tr>
+                <tr><td colSpan={19} className="py-16 text-center text-slate-400 font-bold text-lg">No hay leads registrados aún.</td></tr>
               ) : (
                 leadsPaginados.map((lead) => (
                   <tr key={lead.id} className="hover:bg-blue-50/30 transition-colors group">
-                    <td className="py-5 px-4 text-center font-black text-blue-600 text-[15px]">{lead.idLeadExcel || "N/A"}</td>
-                    <td className="py-5 px-4 font-bold text-slate-700 text-[15px] truncate">{formatearFecha(lead.fechaCaptacion) ? <><Calendar className="w-4 h-4 inline mr-1 text-slate-400"/> {formatearFecha(lead.fechaCaptacion)}</> : "-"}</td>
-                    <td className="py-5 px-4 font-bold text-slate-900 text-[15px] truncate">{lead.campana}</td>
-                    <td className="py-5 px-4 font-bold text-slate-600 text-[15px] truncate">{lead.proyecto}</td>
-                    <td className="py-5 px-4 font-medium text-slate-500 text-[15px] truncate">{lead.fuente || "-"}</td>
-                    <td className="py-5 px-4 font-black text-slate-800 text-[16px] truncate">{lead.cliente}</td>
-                    <td className="py-5 px-4 font-bold text-slate-700 text-[15px] truncate"><User className="w-4 h-4 inline mr-1 text-slate-400"/> {lead.asesor}</td>
-                    <td className="py-5 px-4 text-center"><span className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest shadow-sm border ${getEstadoColor(lead.estado)}`}>{lead.estado}</span></td>
-                    <td className="py-5 px-4 text-center font-medium text-slate-600 text-[15px]">{formatearFecha(lead.fechaPrimerContacto) || "-"}</td>
-                    <td className="py-5 px-4 text-center font-medium text-slate-600 text-[15px]">{formatearFecha(lead.fechaUltimoContacto) || "-"}</td>
-                    <td className="py-5 px-2 text-center font-black text-slate-700 text-[15px]">{lead.solicitudInfo ? "Sí" : "No"}</td>
-                    <td className="py-5 px-2 text-center font-black text-slate-700 text-[15px]">{lead.solicitudVisita ? "Sí" : "No"}</td>
-                    <td className="py-5 px-2 text-center font-black text-blue-600 text-[16px]">{lead.numInteracciones}</td>
-                    <td className="py-5 px-2 text-center">{lead.seguimientoRealizado ? <CheckCircle2 className="w-5 h-5 text-emerald-500 mx-auto"/> : <span className="text-slate-300 font-bold text-lg">-</span>}</td>
-                    <td className="py-5 px-4 text-center font-bold text-amber-600 text-[15px]">{formatearFecha(lead.proximoSeguimiento) || "-"}</td>
-                    <td className="py-5 px-4 text-center font-bold text-slate-700 text-[15px]">{lead.resultado || "-"}</td>
-                    <td className="py-5 px-4 text-center font-medium text-slate-500 text-[15px]">{formatearFecha(lead.fechaCierre) || "-"}</td>
+                    <td className="py-5 px-4 text-center font-black text-blue-600 text-[15px] whitespace-nowrap">{lead.idLeadExcel || "N/A"}</td>
+                    <td className="py-5 px-4 text-center whitespace-nowrap">
+                      <span className="bg-gradient-to-r from-amber-400 to-orange-500 text-white px-3 py-1.5 rounded-lg font-black text-sm shadow-sm">
+                        {lead.score || 0} pts
+                      </span>
+                    </td>
+                    <td className="py-5 px-4 font-bold text-slate-700 text-[15px] whitespace-nowrap">{formatearFecha(lead.fechaCaptacion) ? <><Calendar className="w-4 h-4 inline mr-1 text-slate-400"/> {formatearFecha(lead.fechaCaptacion)}</> : "-"}</td>
+                    <td className="py-5 px-4 font-bold text-slate-900 text-[15px] whitespace-nowrap">{lead.campana}</td>
+                    <td className="py-5 px-4 font-bold text-slate-600 text-[15px] whitespace-nowrap">{lead.proyecto}</td>
+                    <td className="py-5 px-4 font-medium text-slate-500 text-[15px] whitespace-nowrap">{lead.fuente || "-"}</td>
+                    <td className="py-5 px-4 font-black text-slate-800 text-[16px] whitespace-nowrap">{lead.cliente}</td>
+                    <td className="py-5 px-4 font-bold text-slate-700 text-[15px] whitespace-nowrap"><User className="w-4 h-4 inline mr-1 text-slate-400"/> {lead.asesor}</td>
+                    <td className="py-5 px-4 text-center whitespace-nowrap"><span className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest shadow-sm border ${getEstadoColor(lead.estado)}`}>{lead.estado}</span></td>
+                    <td className="py-5 px-4 text-center font-medium text-slate-600 text-[15px] whitespace-nowrap">{formatearFecha(lead.fechaPrimerContacto) || "-"}</td>
+                    <td className="py-5 px-4 text-center font-medium text-slate-600 text-[15px] whitespace-nowrap">{formatearFecha(lead.fechaUltimoContacto) || "-"}</td>
+                    <td className="py-5 px-2 text-center font-black text-slate-700 text-[15px] whitespace-nowrap">{lead.solicitudInfo ? "Sí" : "No"}</td>
+                    <td className="py-5 px-2 text-center font-black text-slate-700 text-[15px] whitespace-nowrap">{lead.solicitudVisita ? "Sí" : "No"}</td>
+                    <td className="py-5 px-2 text-center font-black text-blue-600 text-[16px] whitespace-nowrap">{lead.numInteracciones}</td>
+                    <td className="py-5 px-2 text-center whitespace-nowrap">{lead.seguimientoRealizado ? <CheckCircle2 className="w-5 h-5 text-emerald-500 mx-auto"/> : <span className="text-slate-300 font-bold text-lg">-</span>}</td>
+                    <td className="py-5 px-4 text-center font-bold text-amber-600 text-[15px] whitespace-nowrap">{formatearFecha(lead.proximoSeguimiento) || "-"}</td>
+                    <td className="py-5 px-4 text-center font-bold text-slate-700 text-[15px] whitespace-nowrap">{lead.resultado || "-"}</td>
+                    <td className="py-5 px-4 text-center font-medium text-slate-500 text-[15px] whitespace-nowrap">{formatearFecha(lead.fechaCierre) || "-"}</td>
                     
-                    {/* 🔥 BOTONES DE ACCIÓN */}
-                    <td className="py-5 px-4 text-center sticky right-0 bg-white group-hover:bg-[#f8fafc] border-l border-slate-100 transition-colors">
+                    <td className="py-5 px-4 text-center sticky right-0 bg-white group-hover:bg-[#f8fafc] border-l border-slate-100 transition-colors whitespace-nowrap">
                        <div className="flex items-center justify-center gap-2 opacity-30 group-hover:opacity-100 transition-opacity duration-300">
                          <button onClick={() => abrirFormEditar(lead)} className="p-2.5 bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-700 border border-blue-200 rounded-xl transition-all shadow-sm hover:scale-105" title="Editar Lead">
                             <Edit className="w-4 h-4" />

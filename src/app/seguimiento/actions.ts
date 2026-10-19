@@ -8,7 +8,7 @@ import { revalidatePath } from "next/cache";
 
 const connectionString = process.env.DATABASE_URL;
 const pool = new Pool({ connectionString });
-const adapter = new PrismaPg(pool);
+const adapter = new PrismaPg(pool as any);
 const prisma = new PrismaClient({ adapter });
 
 export async function obtenerLeadsSeguimiento() {
@@ -27,7 +27,26 @@ export async function obtenerLeadsSeguimiento() {
 export async function crearLeadSeguimiento(datos: any) {
   try {
     const parseDate = (val: string) => val ? new Date(val) : null;
-    const parseBool = (val: string) => val === "Sí";
+    const parseBool = (val: any) => val === "Sí" || val === true; // <- Evitamos el choque de tipos
+
+    const interacciones = Number(datos.numInteracciones) || 0;
+    const solInfo = parseBool(datos.solicitudInfo);
+    const solVisita = parseBool(datos.solicitudVisita);
+    const estado = datos.estado || "Nuevo";
+
+    let scoreCalculado = interacciones * 5;
+    if (solInfo) scoreCalculado += 20;
+    if (solVisita) scoreCalculado += 40;
+    
+    switch (estado.toLowerCase()) {
+      case "contactado": scoreCalculado += 5; break;
+      case "interesado": scoreCalculado += 15; break;
+      case "negociación": 
+      case "negociacion": scoreCalculado += 30; break;
+      case "ganado": scoreCalculado = 100; break;
+      case "perdido": scoreCalculado = 0; break;
+    }
+    if (scoreCalculado > 100) scoreCalculado = 100;
 
     await prisma.lead.create({
       data: {
@@ -38,17 +57,17 @@ export async function crearLeadSeguimiento(datos: any) {
         fuente: datos.fuente || "Manual",
         cliente: datos.cliente,
         asesor: datos.asesor || "Sin Asignar",
-        estado: datos.estado || "Nuevo",
+        estado: estado,
         fechaPrimerContacto: parseDate(datos.fechaPrimerContacto),
         fechaUltimoContacto: parseDate(datos.fechaUltimoContacto),
-        solicitudInfo: parseBool(datos.solicitudInfo),
-        solicitudVisita: parseBool(datos.solicitudVisita),
-        numInteracciones: Number(datos.numInteracciones) || 0,
+        solicitudInfo: solInfo,
+        solicitudVisita: solVisita,
+        numInteracciones: interacciones,
         seguimientoRealizado: parseBool(datos.seguimientoRealizado),
         proximoSeguimiento: parseDate(datos.proximoSeguimiento),
         resultado: datos.resultado || "En proceso",
         fechaCierre: parseDate(datos.fechaCierre),
-        puntaje: 15
+        puntaje: scoreCalculado 
       }
     });
     revalidatePath('/seguimiento');
@@ -63,8 +82,26 @@ export async function crearLeadSeguimiento(datos: any) {
 export async function actualizarLeadSeguimiento(id: string, datos: any) {
   try {
     const parseDate = (val: string) => val && val !== "-" ? new Date(val) : null;
-    // 🔥 CORRECCIÓN AQUÍ: Se acepta que "val" pueda ser string o boolean para que TypeScript sea feliz
-    const parseBool = (val: string | boolean) => val === "Sí" || val === true;
+    const parseBool = (val: any) => val === "Sí" || val === true;
+
+    const interacciones = Number(datos.numInteracciones) || 0;
+    const solInfo = parseBool(datos.solicitudInfo);
+    const solVisita = parseBool(datos.solicitudVisita);
+    const estado = datos.estado || "Nuevo";
+
+    let scoreCalculado = interacciones * 5;
+    if (solInfo) scoreCalculado += 20;
+    if (solVisita) scoreCalculado += 40;
+    
+    switch (estado.toLowerCase()) {
+      case "contactado": scoreCalculado += 5; break;
+      case "interesado": scoreCalculado += 15; break;
+      case "negociación": 
+      case "negociacion": scoreCalculado += 30; break;
+      case "ganado": scoreCalculado = 100; break;
+      case "perdido": scoreCalculado = 0; break;
+    }
+    if (scoreCalculado > 100) scoreCalculado = 100;
 
     await prisma.lead.update({
       where: { id },
@@ -76,16 +113,17 @@ export async function actualizarLeadSeguimiento(id: string, datos: any) {
         fuente: datos.fuente,
         cliente: datos.cliente,
         asesor: datos.asesor,
-        estado: datos.estado,
+        estado: estado,
         fechaPrimerContacto: parseDate(datos.fechaPrimerContacto),
         fechaUltimoContacto: parseDate(datos.fechaUltimoContacto),
-        solicitudInfo: parseBool(datos.solicitudInfo),
-        solicitudVisita: parseBool(datos.solicitudVisita),
-        numInteracciones: Number(datos.numInteracciones) || 0,
+        solicitudInfo: solInfo,
+        solicitudVisita: solVisita,
+        numInteracciones: interacciones,
         seguimientoRealizado: parseBool(datos.seguimientoRealizado),
         proximoSeguimiento: parseDate(datos.proximoSeguimiento),
         resultado: datos.resultado,
         fechaCierre: parseDate(datos.fechaCierre),
+        puntaje: scoreCalculado
       }
     });
     revalidatePath('/seguimiento');
@@ -126,7 +164,19 @@ export async function cargarLeadsMasivos(leadsExcel: any[]) {
 
     const leadsFormateados = leadsExcel.map(row => {
       const interacciones = Number(row["N° interacciones"]) || 0;
-      const score = (interacciones * 5) + (parseBool(row["Solicitud visita"]) ? 30 : 0) + (parseBool(row["Solicitud información"]) ? 10 : 0);
+      const solInfo = parseBool(row["Solicitud información"]);
+      const solVisita = parseBool(row["Solicitud visita"]);
+      const estado = String(row["Estado del lead"] || "Nuevo");
+
+      let calcScore = (interacciones * 5) + (solVisita ? 40 : 0) + (solInfo ? 20 : 0);
+      switch (estado.toLowerCase()) {
+        case "contactado": calcScore += 5; break;
+        case "interesado": calcScore += 15; break;
+        case "negociación": 
+        case "negociacion": calcScore += 30; break;
+        case "ganado": calcScore = 100; break; 
+      }
+      if (calcScore > 100) calcScore = 100;
 
       return {
         idLeadExcel: String(row["ID Lead"] || `EXT-${Math.floor(Math.random() * 10000)}`),
@@ -136,17 +186,17 @@ export async function cargarLeadsMasivos(leadsExcel: any[]) {
         fuente: String(row["Fuente"] || ""),
         cliente: String(row["Cliente"] || "Desconocido"),
         asesor: String(row["Asesor responsable"] || "Sin Asignar"),
-        estado: String(row["Estado del lead"] || "Nuevo"),
+        estado: estado,
         fechaPrimerContacto: parseDate(row["Fecha primer contacto"]),
         fechaUltimoContacto: parseDate(row["Fecha último contacto"]),
-        solicitudInfo: parseBool(row["Solicitud información"]),
-        solicitudVisita: parseBool(row["Solicitud visita"]),
+        solicitudInfo: solInfo,
+        solicitudVisita: solVisita,
         numInteracciones: interacciones,
         seguimientoRealizado: parseBool(row["Seguimiento realizado"]),
         proximoSeguimiento: parseDate(row["Próximo seguimiento"]),
         resultado: String(row["Resultado"] || "En proceso"),
         fechaCierre: parseDate(row["Fecha cierre"]),
-        puntaje: score
+        puntaje: calcScore 
       };
     });
 
@@ -176,4 +226,44 @@ export async function eliminarTodosLosLeads() {
   }
 }
 
-//hola
+export async function recalcularScoresMasivo() {
+  try {
+    const leads = await prisma.lead.findMany();
+    let actualizados = 0;
+
+    for (const lead of leads) {
+      let nuevoScore = 0;
+
+      const interacciones = parseInt(lead.numInteracciones?.toString() || "0");
+      nuevoScore += interacciones * 5;
+
+      // Solución TS2367: Prisma ya nos entrega booleanos puros, comparamos directamente
+      if (lead.solicitudInfo) nuevoScore += 20; 
+      if (lead.solicitudVisita) nuevoScore += 40; 
+
+      const estado = (lead.estado || "").toLowerCase();
+      switch (estado) {
+        case "contactado": nuevoScore += 5; break;
+        case "interesado": nuevoScore += 15; break;
+        case "negociación": 
+        case "negociacion": nuevoScore += 30; break;
+        case "ganado": nuevoScore = 100; break; 
+        case "perdido": nuevoScore = 0; break;  
+      }
+
+      if (nuevoScore > 100) nuevoScore = 100;
+
+      await prisma.lead.update({
+        where: { id: lead.id },
+        data: { puntaje: nuevoScore } 
+      });
+      
+      actualizados++;
+    }
+
+    return { exito: true, mensaje: `¡Se recalcularon los puntajes de ${actualizados} prospectos!` };
+  } catch (error) {
+    console.error("Error recalculando scores:", error);
+    return { exito: false, error: "Ocurrió un error al recalcular los puntajes en la base de datos." };
+  }
+}

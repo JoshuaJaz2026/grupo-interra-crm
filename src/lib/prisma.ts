@@ -1,11 +1,21 @@
+import { Pool, neonConfig } from '@neondatabase/serverless'
+import { PrismaNeon } from '@prisma/adapter-neon'
 import { PrismaClient } from '@prisma/client'
+import ws from 'ws'
+
+neonConfig.webSocketConstructor = ws
+
+const connectionString = `${process.env.DATABASE_URL}`
+
+const pool = new Pool({ connectionString })
+// Agregamos 'as any' aquí para que TypeScript ignore el conflicto de tipos del Pool
+const adapter = new PrismaNeon(pool as any)
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
 }
 
-// Instanciamos Prisma de forma estándar y robusta para evitar errores de compilación con TypeScript en Render
-export const prisma = globalForPrisma.prisma ?? new PrismaClient()
+export const prisma = globalForPrisma.prisma ?? new PrismaClient({ adapter })
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
 

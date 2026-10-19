@@ -1,62 +1,44 @@
 "use server";
 
-import prisma from "@/lib/prisma";
+import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { Pool } from "pg";
+import { unstable_noStore as noStore } from "next/cache";
 
-export async function obtenerMetricasDesempeno(filtroTiempo: string = "Últimos 30 días") {
+// Usamos la misma conexión directa y segura que en la tabla de Seguimiento
+const connectionString = process.env.DATABASE_URL;
+const pool = new Pool({ connectionString });
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
+
+export async function obtenerMetricasDesempeno(
+  filtroTiempo: string = "Últimos 30 días",
+  fechaInicioCustom?: string,
+  fechaFinCustom?: string
+) {
+  noStore(); // Evita que Next.js se cuelgue intentando guardar caché de esta consulta
+
   try {
-    // 1. Determinar el rango de fechas basado en el filtro
-    let fechaInicio = new Date();
-    const hoy = new Date();
+    console.log("Consultando métricas en la base de datos...");
 
-    switch (filtroTiempo) {
-      case "Este mes":
-        fechaInicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-        break;
-      case "Mes anterior":
-        fechaInicio = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
-        break;
-      case "Este año":
-        fechaInicio = new Date(hoy.getFullYear(), 0, 1);
-        break;
-      case "Últimos 30 días":
-      default:
-        fechaInicio.setDate(fechaInicio.getDate() - 30);
-        break;
-    }
-
-    // 2. Consulta a la base de datos: Total de Leads en el rango
-    const totalLeads = await prisma.lead.count({
-      where: {
-        fechaCaptacion: { // <- Corregido aquí
-          gte: fechaInicio,
-        },
-      },
+    // 🔥 PRUEBA: Contamos TODOS los leads sin importar la fecha
+    const totalLeads = await prisma.lead.count();
+    console.log(`¡Éxito! Se encontraron ${totalLeads} leads en total.`);
+    
+    const leadsCerrados = await prisma.lead.count({ 
+      where: { 
+        estado: { in: ["Ganado", "Vendido", "GANADO"] } 
+      } 
+    });
+    
+    const leadsPerdidos = await prisma.lead.count({ 
+      where: { 
+        estado: { in: ["Perdido", "PERDIDO"] }
+      } 
     });
 
-    // 3. Consulta: Leads "Cerrados" (Ganados/Vendidos)
-    const leadsCerrados = await prisma.lead.count({
-      where: {
-        estado: "Vendido", 
-        fechaCaptacion: { // <- Corregido aquí
-          gte: fechaInicio,
-        },
-      },
-    });
-
-    // 4. Consulta: Oportunidades Perdidas
-    const leadsPerdidos = await prisma.lead.count({
-      where: {
-        estado: "Perdido",
-        fechaCaptacion: { // <- Corregido aquí
-          gte: fechaInicio,
-        },
-      },
-    });
-
-    // 5. Cálculo: Tasa de Conversión
     const tasaConversion = totalLeads > 0 ? ((leadsCerrados / totalLeads) * 100).toFixed(1) : "0.0";
 
-    // 6. Preparar los datos para enviarlos a la interfaz
     return {
       exito: true,
       datos: {
@@ -68,11 +50,7 @@ export async function obtenerMetricasDesempeno(filtroTiempo: string = "Últimos 
     };
 
   } catch (error) {
-    console.error("Error al obtener métricas de desempeño:", error);
-    return {
-      exito: false,
-      error: "No se pudieron cargar las métricas comerciales.",
-      datos: null
-    };
+    console.error("Error crítico al obtener métricas:", error);
+    return { exito: false, error: "No se pudieron cargar las métricas.", datos: null };
   }
 }
