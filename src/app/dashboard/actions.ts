@@ -8,8 +8,51 @@ import { revalidatePath } from "next/cache";
 
 const connectionString = process.env.DATABASE_URL;
 const pool = new Pool({ connectionString });
-const adapter = new PrismaPg(pool);
+const adapter = new PrismaPg(pool as any);
 const prisma = new PrismaClient({ adapter });
+
+// 🔥 NUEVA FUNCIÓN: (Le quitamos el 'export' para que Next.js no falle)
+function calcularPuntajeLead(lead: any) {
+  let score = 0;
+
+  score += (Number(lead.numInteracciones) || 0) * 5;
+
+  if (lead.solicitudVisita) score += 30;
+  if (lead.solicitudInfo) score += 10;
+
+  const estado = (lead.estado || "").toLowerCase();
+  switch (estado) {
+    case "negociación":
+      score += 25; 
+      break;
+    case "visita solicitada":
+      score += 20;
+      break;
+    case "interesado":
+      score += 15;
+      break;
+    case "contactado":
+      score += 5;
+      break;
+  }
+
+  if (lead.seguimientoRealizado) {
+    score += 10; 
+  }
+
+  if (lead.fechaUltimoContacto) {
+    const hoy = new Date();
+    const diasSinContacto = (hoy.getTime() - new Date(lead.fechaUltimoContacto).getTime()) / (1000 * 3600 * 24);
+    
+    if (diasSinContacto <= 3) {
+      score += 10; 
+    } else if (diasSinContacto > 7) {
+      score -= 15; 
+    }
+  }
+
+  return Math.max(0, score);
+}
 
 // 1. EXTRAER MATEMÁTICAS PARA EL DASHBOARD
 export async function obtenerEstadisticasDashboard() {
@@ -25,25 +68,36 @@ export async function obtenerEstadisticasDashboard() {
     const ganados = leads.filter(l => l.estado?.toLowerCase() === "ganado" || l.resultado?.toLowerCase() === "ganado").length;
     const perdidos = leads.filter(l => l.estado?.toLowerCase() === "perdido" || l.resultado?.toLowerCase() === "perdido").length;
     
-    // Promedio de Score de todo el equipo
     const puntajeTotal = leads.reduce((acc, curr) => acc + (curr.puntaje || 0), 0);
     const scorePromedio = total > 0 ? (puntajeTotal / total).toFixed(1) : 0;
 
-    // Alerta de "Leads Viejos": Leads que no se les ha hecho seguimiento y siguen vivos
-    const leadsViejos = leads.filter(l => !l.seguimientoRealizado && l.estado?.toLowerCase() !== "ganado" && l.estado?.toLowerCase() !== "perdido").length;
+    const hoy = new Date();
+    const leadsViejos = leads.filter(l => {
+      const estado = l.estado?.toLowerCase() || "";
+      if (estado === "ganado" || estado === "perdido") return false; 
 
-    // Gráfico 1: Top 5 Campañas Meta Ads
+      if (!l.seguimientoRealizado) return true;
+      if (l.proximoSeguimiento && new Date(l.proximoSeguimiento) < hoy) return true;
+      
+      if (l.fechaUltimoContacto && !l.proximoSeguimiento) {
+        const diasSinContacto = (hoy.getTime() - new Date(l.fechaUltimoContacto).getTime()) / (1000 * 3600 * 24);
+        if (diasSinContacto > 3) return true;
+      }
+      return false;
+    }).length;
+
     const conteoCampanas: Record<string, number> = {};
     leads.forEach(l => {
       const camp = l.campana || "Sin Campaña";
-      conteoCampanas[camp] = (conteoCampanas[camp] || 0) + 1;
+      const proy = l.proyecto || "General";
+      const llave = `${camp} (${proy})`;
+      conteoCampanas[llave] = (conteoCampanas[llave] || 0) + 1;
     });
     const graficaCampanas = Object.keys(conteoCampanas)
       .map(key => ({ name: key, leads: conteoCampanas[key] }))
-      .sort((a, b) => b.leads - a.leads) // Ordenar de mayor a menor
-      .slice(0, 5); // Tomar solo el Top 5 para que el gráfico no colapse
+      .sort((a, b) => b.leads - a.leads) 
+      .slice(0, 5); 
 
-    // Gráfico 2: Dona de Estados (Pipeline)
     const conteoEstados: Record<string, number> = {};
     leads.forEach(l => {
       const est = l.estado || "Desconocido";
@@ -82,11 +136,7 @@ export async function cargarLeadsMasivos(leadsExcel: any[]) {
     };
 
     const leadsFormateados = leadsExcel.map(row => {
-      // Simulación de Lead Scoring dinámico basado en tu Excel
-      const interacciones = Number(row["N° interacciones"]) || 0;
-      const score = (interacciones * 5) + (parseBool(row["Solicitud visita"]) ? 30 : 0) + (parseBool(row["Solicitud información"]) ? 10 : 0);
-
-      return {
+      const leadBase = {
         idLeadExcel: String(row["ID Lead"] || `EXT-${Math.floor(Math.random() * 10000)}`),
         fechaCaptacion: parseDate(row["Fecha captación"]),
         campana: String(row["Campaña"] || "Orgánico"),
@@ -99,22 +149,26 @@ export async function cargarLeadsMasivos(leadsExcel: any[]) {
         fechaUltimoContacto: parseDate(row["Fecha último contacto"]),
         solicitudInfo: parseBool(row["Solicitud información"]),
         solicitudVisita: parseBool(row["Solicitud visita"]),
-        numInteracciones: interacciones,
+        numInteracciones: Number(row["N° interacciones"]) || 0,
         seguimientoRealizado: parseBool(row["Seguimiento realizado"]),
         proximoSeguimiento: parseDate(row["Próximo seguimiento"]),
         resultado: String(row["Resultado"] || "En proceso"),
-        fechaCierre: parseDate(row["Fecha cierre"]),
+        fechaCierre: parseDate(row["Fecha cierre"])
+      };
+
+      const score = calcularPuntajeLead(leadBase);
+
+      return {
+        ...leadBase,
         puntaje: score
       };
     });
 
-    // Inserción múltiple
     await prisma.lead.createMany({
       data: leadsFormateados,
-      skipDuplicates: true, // Si subes el mismo Excel dos veces, no duplicará a los clientes
+      skipDuplicates: true,
     });
 
-    // Avisarle a Next.js que debe recargar el Dashboard y la tabla de Seguimiento en vivo
     revalidatePath('/dashboard');
     revalidatePath('/seguimiento');
     return { exito: true };

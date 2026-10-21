@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { TrendingUp, Users, Target, BarChart3, ArrowUpRight, ArrowDownRight, CalendarDays, Loader2, ChevronDown, Check } from "lucide-react";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar, Cell } from "recharts";
 import { obtenerMetricasDesempeno } from "./actions"; 
 
 export default function DesempenoPage() {
@@ -11,21 +12,22 @@ export default function DesempenoPage() {
   const [cargando, setCargando] = useState(true);
   const dropdownRef = useRef<HTMLDivElement>(null);
   
+  // Añadimos espacios para los arreglos de datos de los gráficos
   const [datosMetricas, setDatosMetricas] = useState({
     tasaConversion: "0.0%",
     leadsGestionados: "0",
     tiempoRespuesta: "0m",
-    oportunidadesPerdidas: "0"
+    oportunidadesPerdidas: "0",
+    graficoEvolucion: [] as any[],
+    graficoAsesores: [] as any[]
   });
 
-  // Lista de opciones organizada
   const opcionesFiltro = [
     { label: "Rápidos", items: ["Últimos 30 días", "Este mes", "Mes anterior", "Este año"] },
     { label: "Años Históricos", items: ["2026", "2025", "2024"] },
     { label: "Avanzado", items: ["Personalizado"] }
   ];
 
-  // Cerrar menú al hacer clic afuera
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -42,7 +44,9 @@ export default function DesempenoPage() {
       
       setCargando(true);
       const res = await obtenerMetricasDesempeno(filtro, fechasCustom.inicio, fechasCustom.fin);
-      if (res.exito && res.datos) setDatosMetricas(res.datos);
+      if (res.exito && res.datos) {
+        setDatosMetricas(res.datos as any);
+      }
       setCargando(false);
     }
     cargarDatos();
@@ -72,9 +76,7 @@ export default function DesempenoPage() {
           </p>
         </div>
         
-        {/* 🎛️ ZONA DE FILTROS MODERNOS */}
         <div className="flex flex-col sm:flex-row items-end sm:items-center gap-3 relative" ref={dropdownRef}>
-          
           {filtro === "Personalizado" && (
             <div className="flex items-center gap-2 animate-in fade-in slide-in-from-right-4 duration-300">
               <input 
@@ -93,7 +95,6 @@ export default function DesempenoPage() {
             </div>
           )}
 
-          {/* DROPDOWN CUSTOM */}
           <div className="relative">
             <button 
               onClick={() => setMenuAbierto(!menuAbierto)}
@@ -130,7 +131,6 @@ export default function DesempenoPage() {
               </div>
             )}
           </div>
-
         </div>
       </div>
 
@@ -149,7 +149,6 @@ export default function DesempenoPage() {
               </div>
             </div>
             <h3 className="text-slate-500 text-sm font-bold">{metrica.titulo}</h3>
-            
             <div className="mt-1 flex items-center h-10"> 
               {cargando ? (
                  <Loader2 className="w-5 h-5 animate-spin text-slate-300" />
@@ -161,26 +160,78 @@ export default function DesempenoPage() {
         ))}
       </div>
 
+      {/* 🚀 ZONA DE GRÁFICOS REALES CON RECHARTS */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* GRÁFICO DE LÍNEAS (EVOLUCIÓN) */}
         <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-slate-100 shadow-sm min-h-[400px] flex flex-col">
           <h3 className="text-slate-800 font-bold mb-6">Evolución de Cierres vs Leads</h3>
-          <div className="flex-1 border-2 border-dashed border-slate-100 rounded-2xl flex items-center justify-center bg-slate-50 relative overflow-hidden">
-             {cargando && <div className="absolute inset-0 bg-white/50 backdrop-blur-sm z-10 flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}
-            <p className="text-slate-400 font-medium text-sm text-center">
-              Espacio reservado para el gráfico de líneas<br/>(Próximo paso: Integrar Recharts)
-            </p>
+          <div className="flex-1 w-full h-full relative">
+            {cargando && (
+              <div className="absolute inset-0 bg-white/50 backdrop-blur-sm z-10 flex items-center justify-center rounded-xl">
+                <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+              </div>
+            )}
+            
+            {datosMetricas.graficoEvolucion.length > 0 ? (
+              <ResponsiveContainer width="100%" height={320}>
+                <LineChart data={datosMetricas.graficoEvolucion} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="fecha" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#94a3b8' }} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#94a3b8' }} />
+                  <RechartsTooltip 
+                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)' }}
+                    cursor={{ stroke: '#f1f5f9', strokeWidth: 2 }}
+                  />
+                  {/* 🔥 AHORA LOS PUNTOS TIENEN RELLENO SÓLIDO PARA MAYOR VISIBILIDAD */}
+                  <Line type="monotone" dataKey="leads" name="Leads Entrantes" stroke="#818cf8" strokeWidth={3} dot={{ r: 6, strokeWidth: 2, fill: "#818cf8" }} activeDot={{ r: 8 }} />
+                  <Line type="monotone" dataKey="cierres" name="Cierres Ganados" stroke="#34d399" strokeWidth={3} dot={{ r: 6, strokeWidth: 2, fill: "#34d399" }} activeDot={{ r: 8 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center border-2 border-dashed border-slate-100 rounded-2xl bg-slate-50">
+                <p className="text-slate-400 font-medium text-sm">No hay datos suficientes para este período.</p>
+              </div>
+            )}
           </div>
         </div>
 
+        {/* GRÁFICO DE BARRAS HORIZONTALES (ASESORES) */}
         <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm min-h-[400px] flex flex-col">
           <h3 className="text-slate-800 font-bold mb-6">Conversión por Asesor</h3>
-          <div className="flex-1 border-2 border-dashed border-slate-100 rounded-2xl flex items-center justify-center bg-slate-50 relative overflow-hidden">
-             {cargando && <div className="absolute inset-0 bg-white/50 backdrop-blur-sm z-10 flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}
-            <p className="text-slate-400 font-medium text-sm text-center">
-              Espacio reservado para el gráfico de barras
-            </p>
+          <div className="flex-1 w-full h-full relative">
+            {cargando && (
+              <div className="absolute inset-0 bg-white/50 backdrop-blur-sm z-10 flex items-center justify-center rounded-xl">
+                <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+              </div>
+            )}
+            
+            {datosMetricas.graficoAsesores.length > 0 ? (
+              <ResponsiveContainer width="100%" height={320}>
+                <BarChart data={datosMetricas.graficoAsesores} layout="vertical" margin={{ top: 0, right: 20, left: 10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                  <XAxis type="number" axisLine={false} tickLine={false} hide />
+                  <YAxis dataKey="nombre" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b', fontWeight: 600 }} width={80} />
+                  <RechartsTooltip 
+                    cursor={{ fill: '#f8fafc' }}
+                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)' }}
+                    formatter={(value: any) => [`${value}%`, 'Efectividad (Ganados/Total)']}
+                  />
+                  <Bar dataKey="conversion" radius={[0, 4, 4, 0]} barSize={32}>
+                    {datosMetricas.graficoAsesores.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={index === 0 ? '#3b82f6' : '#cbd5e1'} /> 
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center border-2 border-dashed border-slate-100 rounded-2xl bg-slate-50">
+                <p className="text-slate-400 font-medium text-sm text-center">Sin actividad de asesores.</p>
+              </div>
+            )}
           </div>
         </div>
+
       </div>
     </div>
   );

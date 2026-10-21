@@ -11,6 +11,63 @@ const pool = new Pool({ connectionString });
 const adapter = new PrismaPg(pool as any);
 const prisma = new PrismaClient({ adapter });
 
+// 🔥 ALGORITMO MAESTRO DE LEAD SCORING (Basado estrictamente en la Tabla 5)
+function calcularPuntajeLead(lead: any) {
+  let score = 0;
+
+  // 1. Interacciones (+5 puntos por cada vez que interactuó)
+  score += (Number(lead.numInteracciones) || 0) * 5;
+
+  // 2. Solicitud de Visita e Información
+  if (lead.solicitudVisita === true || lead.solicitudVisita === "Sí") score += 30;
+  if (lead.solicitudInfo === true || lead.solicitudInfo === "Sí") score += 10;
+
+  // 3. Estado de la oportunidad comercial (Pipeline)
+  const estado = (lead.estado || "").toLowerCase();
+  switch (estado) {
+    case "negociación":
+    case "negociacion":
+      score += 25; 
+      break;
+    case "visita solicitada":
+      score += 20;
+      break;
+    case "interesado":
+      score += 15;
+      break;
+    case "contactado":
+      score += 5;
+      break;
+    case "ganado":
+      return 100; // Si ya se vendió, puntaje perfecto.
+    case "perdido":
+      return 0; // Si se perdió, puntaje cero.
+  }
+
+  // 4. Seguimiento reciente
+  if (lead.seguimientoRealizado === true || lead.seguimientoRealizado === "Sí") {
+    score += 10; 
+  }
+
+  // 5. Tiempo sin contacto (Evaluamos si está caliente o se enfrió)
+  if (lead.fechaUltimoContacto && lead.fechaUltimoContacto !== "-") {
+    const hoy = new Date();
+    const diasSinContacto = (hoy.getTime() - new Date(lead.fechaUltimoContacto).getTime()) / (1000 * 3600 * 24);
+    
+    if (diasSinContacto <= 3) {
+      score += 10; // Bono: Interacción muy reciente
+    } else if (diasSinContacto > 7) {
+      score -= 15; // Penalización: Ya pasó más de una semana sin hablarle
+    }
+  }
+
+  // Aseguramos límites: ni menos de 0, ni más de 100.
+  score = Math.max(0, score);
+  score = Math.min(100, score);
+  
+  return score;
+}
+
 export async function obtenerLeadsSeguimiento() {
   noStore();
   try {
@@ -27,26 +84,19 @@ export async function obtenerLeadsSeguimiento() {
 export async function crearLeadSeguimiento(datos: any) {
   try {
     const parseDate = (val: string) => val ? new Date(val) : null;
-    const parseBool = (val: any) => val === "Sí" || val === true; // <- Evitamos el choque de tipos
+    const parseBool = (val: any) => val === "Sí" || val === true;
 
-    const interacciones = Number(datos.numInteracciones) || 0;
     const solInfo = parseBool(datos.solicitudInfo);
     const solVisita = parseBool(datos.solicitudVisita);
     const estado = datos.estado || "Nuevo";
 
-    let scoreCalculado = interacciones * 5;
-    if (solInfo) scoreCalculado += 20;
-    if (solVisita) scoreCalculado += 40;
-    
-    switch (estado.toLowerCase()) {
-      case "contactado": scoreCalculado += 5; break;
-      case "interesado": scoreCalculado += 15; break;
-      case "negociación": 
-      case "negociacion": scoreCalculado += 30; break;
-      case "ganado": scoreCalculado = 100; break;
-      case "perdido": scoreCalculado = 0; break;
-    }
-    if (scoreCalculado > 100) scoreCalculado = 100;
+    // Llamamos a la fórmula maestra
+    const scoreCalculado = calcularPuntajeLead({
+      ...datos,
+      solicitudInfo: solInfo,
+      solicitudVisita: solVisita,
+      estado: estado
+    });
 
     await prisma.lead.create({
       data: {
@@ -62,7 +112,7 @@ export async function crearLeadSeguimiento(datos: any) {
         fechaUltimoContacto: parseDate(datos.fechaUltimoContacto),
         solicitudInfo: solInfo,
         solicitudVisita: solVisita,
-        numInteracciones: interacciones,
+        numInteracciones: Number(datos.numInteracciones) || 0,
         seguimientoRealizado: parseBool(datos.seguimientoRealizado),
         proximoSeguimiento: parseDate(datos.proximoSeguimiento),
         resultado: datos.resultado || "En proceso",
@@ -84,24 +134,17 @@ export async function actualizarLeadSeguimiento(id: string, datos: any) {
     const parseDate = (val: string) => val && val !== "-" ? new Date(val) : null;
     const parseBool = (val: any) => val === "Sí" || val === true;
 
-    const interacciones = Number(datos.numInteracciones) || 0;
     const solInfo = parseBool(datos.solicitudInfo);
     const solVisita = parseBool(datos.solicitudVisita);
     const estado = datos.estado || "Nuevo";
 
-    let scoreCalculado = interacciones * 5;
-    if (solInfo) scoreCalculado += 20;
-    if (solVisita) scoreCalculado += 40;
-    
-    switch (estado.toLowerCase()) {
-      case "contactado": scoreCalculado += 5; break;
-      case "interesado": scoreCalculado += 15; break;
-      case "negociación": 
-      case "negociacion": scoreCalculado += 30; break;
-      case "ganado": scoreCalculado = 100; break;
-      case "perdido": scoreCalculado = 0; break;
-    }
-    if (scoreCalculado > 100) scoreCalculado = 100;
+    // Llamamos a la fórmula maestra
+    const scoreCalculado = calcularPuntajeLead({
+      ...datos,
+      solicitudInfo: solInfo,
+      solicitudVisita: solVisita,
+      estado: estado
+    });
 
     await prisma.lead.update({
       where: { id },
@@ -118,7 +161,7 @@ export async function actualizarLeadSeguimiento(id: string, datos: any) {
         fechaUltimoContacto: parseDate(datos.fechaUltimoContacto),
         solicitudInfo: solInfo,
         solicitudVisita: solVisita,
-        numInteracciones: interacciones,
+        numInteracciones: Number(datos.numInteracciones) || 0,
         seguimientoRealizado: parseBool(datos.seguimientoRealizado),
         proximoSeguimiento: parseDate(datos.proximoSeguimiento),
         resultado: datos.resultado,
@@ -163,22 +206,7 @@ export async function cargarLeadsMasivos(leadsExcel: any[]) {
     };
 
     const leadsFormateados = leadsExcel.map(row => {
-      const interacciones = Number(row["N° interacciones"]) || 0;
-      const solInfo = parseBool(row["Solicitud información"]);
-      const solVisita = parseBool(row["Solicitud visita"]);
-      const estado = String(row["Estado del lead"] || "Nuevo");
-
-      let calcScore = (interacciones * 5) + (solVisita ? 40 : 0) + (solInfo ? 20 : 0);
-      switch (estado.toLowerCase()) {
-        case "contactado": calcScore += 5; break;
-        case "interesado": calcScore += 15; break;
-        case "negociación": 
-        case "negociacion": calcScore += 30; break;
-        case "ganado": calcScore = 100; break; 
-      }
-      if (calcScore > 100) calcScore = 100;
-
-      return {
+      const leadBase = {
         idLeadExcel: String(row["ID Lead"] || `EXT-${Math.floor(Math.random() * 10000)}`),
         fechaCaptacion: parseDate(row["Fecha captación"]),
         campana: String(row["Campaña"] || "Orgánico"),
@@ -186,17 +214,23 @@ export async function cargarLeadsMasivos(leadsExcel: any[]) {
         fuente: String(row["Fuente"] || ""),
         cliente: String(row["Cliente"] || "Desconocido"),
         asesor: String(row["Asesor responsable"] || "Sin Asignar"),
-        estado: estado,
+        estado: String(row["Estado del lead"] || "Nuevo"),
         fechaPrimerContacto: parseDate(row["Fecha primer contacto"]),
         fechaUltimoContacto: parseDate(row["Fecha último contacto"]),
-        solicitudInfo: solInfo,
-        solicitudVisita: solVisita,
-        numInteracciones: interacciones,
+        solicitudInfo: parseBool(row["Solicitud información"]),
+        solicitudVisita: parseBool(row["Solicitud visita"]),
+        numInteracciones: Number(row["N° interacciones"]) || 0,
         seguimientoRealizado: parseBool(row["Seguimiento realizado"]),
         proximoSeguimiento: parseDate(row["Próximo seguimiento"]),
         resultado: String(row["Resultado"] || "En proceso"),
-        fechaCierre: parseDate(row["Fecha cierre"]),
-        puntaje: calcScore 
+        fechaCierre: parseDate(row["Fecha cierre"])
+      };
+
+      const scoreCalculado = calcularPuntajeLead(leadBase);
+
+      return {
+        ...leadBase,
+        puntaje: scoreCalculado 
       };
     });
 
@@ -226,42 +260,30 @@ export async function eliminarTodosLosLeads() {
   }
 }
 
+// 🔥 FUNCIÓN DEL BOTÓN DORADO "CALCULAR SCORES"
 export async function recalcularScoresMasivo() {
   try {
     const leads = await prisma.lead.findMany();
     let actualizados = 0;
 
     for (const lead of leads) {
-      let nuevoScore = 0;
+      // 1. Tomamos cada cliente de la base de datos
+      // 2. Lo pasamos por el algoritmo
+      const nuevoScore = calcularPuntajeLead(lead);
 
-      const interacciones = parseInt(lead.numInteracciones?.toString() || "0");
-      nuevoScore += interacciones * 5;
-
-      // Solución TS2367: Prisma ya nos entrega booleanos puros, comparamos directamente
-      if (lead.solicitudInfo) nuevoScore += 20; 
-      if (lead.solicitudVisita) nuevoScore += 40; 
-
-      const estado = (lead.estado || "").toLowerCase();
-      switch (estado) {
-        case "contactado": nuevoScore += 5; break;
-        case "interesado": nuevoScore += 15; break;
-        case "negociación": 
-        case "negociacion": nuevoScore += 30; break;
-        case "ganado": nuevoScore = 100; break; 
-        case "perdido": nuevoScore = 0; break;  
+      // 3. Si el puntaje cambió, lo actualizamos
+      if (lead.puntaje !== nuevoScore) {
+        await prisma.lead.update({
+          where: { id: lead.id },
+          data: { puntaje: nuevoScore } 
+        });
+        actualizados++;
       }
-
-      if (nuevoScore > 100) nuevoScore = 100;
-
-      await prisma.lead.update({
-        where: { id: lead.id },
-        data: { puntaje: nuevoScore } 
-      });
-      
-      actualizados++;
     }
 
-    return { exito: true, mensaje: `¡Se recalcularon los puntajes de ${actualizados} prospectos!` };
+    revalidatePath('/seguimiento');
+    revalidatePath('/dashboard');
+    return { exito: true, mensaje: `¡Excelente! Se analizaron las interacciones y se actualizaron los puntajes de ${actualizados} clientes en tiempo real.` };
   } catch (error) {
     console.error("Error recalculando scores:", error);
     return { exito: false, error: "Ocurrió un error al recalcular los puntajes en la base de datos." };

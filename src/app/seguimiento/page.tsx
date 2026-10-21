@@ -67,14 +67,13 @@ export default function SeguimientoPage() {
 
   const [importando, setImportando] = useState(false);
 
-  // Estados de Modales
   const [modalBorrar, setModalBorrar] = useState({ visible: false, id: "", cargando: false });
   const [modalBorrarTodo, setModalBorrarTodo] = useState({ visible: false, cargando: false });
   
   const [alerta, setAlerta] = useState<{visible: boolean, mensaje: string, tipo: 'error' | 'exito'}>({ visible: false, mensaje: "", tipo: 'error' });
   const [modalForm, setModalForm] = useState<{ visible: boolean, modo: 'crear' | 'editar', cargando: boolean, datos: any }>({ 
     visible: false, modo: 'crear', cargando: false, 
-    datos: { idLeadExcel: "", fechaCaptacion: "", campana: "", proyecto: "", fuente: "", cliente: "", asesor: "", estado: "Nuevo", fechaPrimerContacto: "", fechaUltimoContacto: "", solicitudInfo: "No", solicitudVisita: "No", numInteracciones: "0", seguimientoRealizado: "No", proximoSeguimiento: "", resultado: "En proceso", fechaCierre: "" } 
+    datos: { idLeadExcel: "", fechaCaptacion: "", campana: "", proyecto: "", fuente: "", cliente: "", asesor: "", estado: "Nuevo", fechaPrimerContacto: "", fechaUltimoContacto: "", solicitudInfo: "No", solicitudVisita: "No", numInteracciones: "0", seguimientoRealizado: "No", proximoSeguimiento: "", resultado: "En proceso", fechaCierre: "", puntaje: 0 } 
   });
 
   const cargarDatos = async () => {
@@ -86,7 +85,20 @@ export default function SeguimientoPage() {
 
   useEffect(() => { cargarDatos(); }, []);
 
-  // 🔥 NUEVA FUNCIÓN PARA CALCULAR LOS SCORES
+  // CERRAR VENTANAS CON ESCAPE
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setModalForm(prev => ({ ...prev, visible: false }));
+        setModalBorrar({ visible: false, id: "", cargando: false });
+        setModalBorrarTodo({ visible: false, cargando: false });
+        setAlerta(prev => ({ ...prev, visible: false }));
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, []);
+
   const handleRecalcularScores = async () => {
     setCargando(true);
     const res = await recalcularScoresMasivo();
@@ -174,7 +186,7 @@ export default function SeguimientoPage() {
   const abrirFormCrear = () => {
     setModalForm({
       visible: true, modo: 'crear', cargando: false,
-      datos: { idLeadExcel: "", fechaCaptacion: "", campana: "", proyecto: "", fuente: "", cliente: "", asesor: "", estado: "Nuevo", fechaPrimerContacto: "", fechaUltimoContacto: "", solicitudInfo: "No", solicitudVisita: "No", numInteracciones: "0", seguimientoRealizado: "No", proximoSeguimiento: "", resultado: "En proceso", fechaCierre: "" }
+      datos: { idLeadExcel: "", fechaCaptacion: "", campana: "", proyecto: "", fuente: "", cliente: "", asesor: "", estado: "Nuevo", fechaPrimerContacto: "", fechaUltimoContacto: "", solicitudInfo: "No", solicitudVisita: "No", numInteracciones: "0", seguimientoRealizado: "No", proximoSeguimiento: "", resultado: "En proceso", fechaCierre: "", puntaje: 0 }
     });
   };
 
@@ -191,6 +203,7 @@ export default function SeguimientoPage() {
         solicitudInfo: lead.solicitudInfo ? "Sí" : "No",
         solicitudVisita: lead.solicitudVisita ? "Sí" : "No",
         seguimientoRealizado: lead.seguimientoRealizado ? "Sí" : "No",
+        puntaje: lead.puntaje || 0 
       }
     });
   };
@@ -280,11 +293,29 @@ export default function SeguimientoPage() {
 
                 <div className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col gap-6">
                   <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2 mb-2"><Calendar className="w-5 h-5 text-amber-500"/> Estado y Tiempos</h3>
-                  <div>
-                    <label className={labelClass}>Estado Actual</label>
-                    <select className={inputFormClass} value={modalForm.datos.estado} onChange={e => setModalForm(prev => ({...prev, datos: {...prev.datos, estado: e.target.value}}))}>
-                      <option value="Nuevo">Nuevo</option><option value="Contactado">Contactado</option><option value="Interesado">Interesado</option><option value="Visita solicitada">Visita solicitada</option><option value="Negociación">Negociación</option><option value="Ganado">Ganado</option><option value="Perdido">Perdido</option>
-                    </select>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className={labelClass}>Estado Actual</label>
+                      <select className={inputFormClass} value={modalForm.datos.estado} onChange={e => setModalForm(prev => ({...prev, datos: {...prev.datos, estado: e.target.value}}))}>
+                        <option value="Nuevo">Nuevo</option><option value="Contactado">Contactado</option><option value="Interesado">Interesado</option><option value="Visita solicitada">Visita solicitada</option><option value="Negociación">Negociación</option><option value="Ganado">Ganado</option><option value="Perdido">Perdido</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelClass}>Ajuste de Score (Métricas)</label>
+                      <select 
+                        className={`${inputFormClass} bg-amber-50 border-amber-200 focus:border-amber-500 text-sm`} 
+                        value={modalForm.datos.puntaje} 
+                        onChange={e => setModalForm(prev => ({...prev, datos: {...prev.datos, puntaje: Number(e.target.value)}}))}
+                      >
+                        <option value={0}>Calculado automáticamente (0)</option>
+                        <option value={15}>+15 pts - Consulta precios / info</option>
+                        <option value={20}>+20 pts - Interacción registrada</option>
+                        <option value={30}>+30 pts - Lead interesado</option>
+                        <option value={40}>+40 pts - Solicita visita comercial</option>
+                        <option value={50}>+50 pts - Etapa de negociación</option>
+                        <option value={100}>100 pts - Cierre Ganado</option>
+                      </select>
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div><label className={labelClass}>F. Captación</label><input type="date" className={inputFormClass} value={modalForm.datos.fechaCaptacion} onChange={e => setModalForm(prev => ({...prev, datos: {...prev.datos, fechaCaptacion: e.target.value}}))} /></div>
@@ -331,7 +362,6 @@ export default function SeguimientoPage() {
             <input type="text" placeholder="Buscar cliente o ID..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-full text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all shadow-sm" />
           </div>
           
-          {/* 🔥 BOTÓN MÁGICO DE SCORING */}
           <button onClick={handleRecalcularScores} className="cursor-pointer bg-amber-50 hover:bg-amber-100 text-amber-600 px-5 py-2.5 rounded-full font-bold shadow-sm transition-all text-sm flex items-center gap-2 border border-amber-200">
             <Star className="w-4 h-4" />
             <span className="hidden md:inline">Calcular Scores</span>
@@ -381,7 +411,7 @@ export default function SeguimientoPage() {
                 <th className="py-5 px-4 font-black text-xs uppercase tracking-widest text-center min-w-[140px] whitespace-nowrap">Próx. Seg.</th>
                 <th className="py-5 px-4 font-black text-xs uppercase tracking-widest text-center min-w-[180px] whitespace-nowrap">Resultado</th>
                 <th className="py-5 px-4 font-black text-xs uppercase tracking-widest text-center min-w-[140px] whitespace-nowrap">Cierre</th>
-                <th className="py-5 px-4 font-black text-xs uppercase tracking-widest text-center min-w-[120px] whitespace-nowrap sticky right-0 bg-slate-50 border-l border-slate-200 shadow-[-5px_0_10px_rgba(0,0,0,0.02)]">Acción</th>
+                <th className="py-5 px-4 text-center font-black text-xs uppercase tracking-widest min-w-[120px] whitespace-nowrap sticky right-0 bg-slate-50 border-l border-slate-200 shadow-[-5px_0_10px_rgba(0,0,0,0.02)] z-30">Acción</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-600 bg-white">
@@ -395,7 +425,7 @@ export default function SeguimientoPage() {
                     <td className="py-5 px-4 text-center font-black text-blue-600 text-[15px] whitespace-nowrap">{lead.idLeadExcel || "N/A"}</td>
                     <td className="py-5 px-4 text-center whitespace-nowrap">
                       <span className="bg-gradient-to-r from-amber-400 to-orange-500 text-white px-3 py-1.5 rounded-lg font-black text-sm shadow-sm">
-                        {lead.score || 0} pts
+                        {lead.puntaje || 0} pts
                       </span>
                     </td>
                     <td className="py-5 px-4 font-bold text-slate-700 text-[15px] whitespace-nowrap">{formatearFecha(lead.fechaCaptacion) ? <><Calendar className="w-4 h-4 inline mr-1 text-slate-400"/> {formatearFecha(lead.fechaCaptacion)}</> : "-"}</td>
@@ -415,12 +445,13 @@ export default function SeguimientoPage() {
                     <td className="py-5 px-4 text-center font-bold text-slate-700 text-[15px] whitespace-nowrap">{lead.resultado || "-"}</td>
                     <td className="py-5 px-4 text-center font-medium text-slate-500 text-[15px] whitespace-nowrap">{formatearFecha(lead.fechaCierre) || "-"}</td>
                     
-                    <td className="py-5 px-4 text-center sticky right-0 bg-white group-hover:bg-[#f8fafc] border-l border-slate-100 transition-colors whitespace-nowrap">
-                       <div className="flex items-center justify-center gap-2 opacity-30 group-hover:opacity-100 transition-opacity duration-300">
-                         <button onClick={() => abrirFormEditar(lead)} className="p-2.5 bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-700 border border-blue-200 rounded-xl transition-all shadow-sm hover:scale-105" title="Editar Lead">
+                    {/* 🔥 BOTONES DE ACCIÓN 100% VISIBLES EN TODO MOMENTO */}
+                    <td className="py-5 px-4 text-center sticky right-0 bg-white group-hover:bg-[#f8fafc] border-l border-slate-100 transition-colors whitespace-nowrap z-10">
+                       <div className="flex items-center justify-center gap-2">
+                         <button onClick={() => abrirFormEditar(lead)} className="p-2.5 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white border border-blue-200 hover:border-blue-600 rounded-xl transition-all shadow-sm" title="Editar Lead">
                             <Edit className="w-4 h-4" />
                          </button>
-                         <button onClick={() => abrirConfirmacionBorrado(lead.id)} className="p-2.5 bg-rose-50 text-rose-500 hover:bg-rose-100 hover:text-rose-600 border border-rose-200 rounded-xl transition-all shadow-sm hover:scale-105" title="Eliminar Lead">
+                         <button onClick={() => abrirConfirmacionBorrado(lead.id)} className="p-2.5 bg-rose-50 text-rose-500 hover:bg-rose-600 hover:text-white border border-rose-200 hover:border-rose-600 rounded-xl transition-all shadow-sm" title="Eliminar Lead">
                             <Trash2 className="w-4 h-4" />
                          </button>
                        </div>
